@@ -3,133 +3,239 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Myanmar AI Video Studio</title>
+  <title>Myanmar AI Video Maker</title>
   <style>
-    :root {
-      --bg: #0b0f17;
-      --panel: #131a26;
-      --panel-2: #1b2434;
-      --text: #f1f5f9;
-      --muted: #94a3b8;
-      --accent: #22c55e;
-      --accent-2: #38bdf8;
-      --border: rgba(255, 255, 255, 0.1);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
     body {
-      font-family: system-ui, -apple-system, "Pyidaungsu", "Noto Sans Myanmar", sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      margin: 0;
       padding: 20px;
-      line-height: 1.6;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #f3f4f6;
     }
-    .wrap { max-width: 960px; margin: 0 auto; }
-    h1 { font-size: 1.35rem; margin-bottom: 14px; }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #181b24;
+      padding: 20px;
       border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 16px;
+      border: 1px solid #2a2f3d;
     }
-    label { display: block; font-size: 0.9rem; color: var(--muted); margin-top: 10px; margin-bottom: 6px; }
-    input[type="file"], textarea {
+    h1 {
+      margin: 0 0 16px;
+      font-size: 20px;
+      color: #ffffff;
+    }
+    label {
+      display: block;
+      margin-top: 14px;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+    textarea, input[type="text"], input[type="file"] {
       width: 100%;
-      background: var(--panel-2);
-      color: var(--text);
-      border: 1px solid var(--border);
+      padding: 10px 12px;
       border-radius: 10px;
-      padding: 10px;
-      font-family: inherit;
-      font-size: 0.92rem;
+      border: 1px solid #333a4d;
+      background: #0f1117;
+      color: #ffffff;
+      font-size: 14px;
     }
-    textarea { min-height: 100px; resize: vertical; }
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+    .preview-box {
+      margin-top: 10px;
+      text-align: center;
+    }
+    .preview-box img {
+      max-width: 100%;
+      max-height: 220px;
+      border-radius: 10px;
+      display: none;
+      border: 1px solid #333a4d;
+    }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
     button {
-      margin-top: 12px;
-      background: var(--accent);
-      color: #052e16;
+      flex: 1;
+      min-width: 160px;
+      padding: 12px 14px;
       border: none;
       border-radius: 10px;
-      padding: 10px 16px;
-      font-weight: 700;
+      font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
-      font-family: inherit;
     }
-    .row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-    .thumb {
-      width: 96px; height: 96px; object-fit: cover;
-      border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2);
+    .btn-audio {
+      background: #2563eb;
+      color: #fff;
     }
-    pre {
-      background: #070b12;
-      border: 1px solid var(--border);
+    .btn-video {
+      background: #16a34a;
+      color: #fff;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 14px;
+      padding: 10px 12px;
       border-radius: 10px;
-      padding: 12px;
-      overflow-x: auto;
-      font-size: 0.85rem;
-      color: #bae6fd;
-      margin-top: 10px;
+      background: #11141c;
+      border: 1px solid #2a2f3d;
+      font-size: 13px;
+      color: #93c5fd;
+      min-height: 40px;
+    }
+    .media-output {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    audio, video {
+      width: 100%;
+      border-radius: 10px;
+      background: #000;
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Myanmar AI Video Studio</h1>
+  <div class="container">
+    <h1>Myanmar AI Video Maker</h1>
 
-    <div class="card">
-      <label for="charFile">ဇာတ်ကောင်ပုံ ရွေးပါ</label>
-      <input type="file" id="charFile" accept="image/*" />
-      <div class="row">
-        <img id="charImg" class="thumb" alt="Character Preview" />
-        <span id="charInfo" style="color: var(--muted); font-size: 0.88rem;">ဇာတ်ကောင်ပုံ မရွေးရသေးပါ။</span>
-      </div>
+    <label for="charImage">၁။ ဇာတ်ကောင်ပုံ ရွေးပါ</label>
+    <input type="file" id="charImage" accept="image/*" />
+    <div class="preview-box">
+      <img id="imgPreview" alt="Character Preview" />
+    </div>
 
-      <label for="scriptBox">မြန်မာစာ Script / ဇာတ်လမ်း</label>
-      <textarea id="scriptBox">ဇာတ်ကောင် အပြင်ကို ထွက်ပြီး လမ်းလျှောက်သွားတယ်။</textarea>
+    <label for="scriptText">၂။ မြန်မာစာ Script ရိုက်ထည့်ပါ</label>
+    <textarea id="scriptText" placeholder="ဥပမာ - မင်္ဂလာပါ၊ ကျွန်တော်တို့ရဲ့ ဇာတ်လမ်းလေးကို အခု စတင်ပါတော့မယ်။"></textarea>
 
-      <button id="sendBtn">Server သို့ ပို့ပြီး စမ်းသပ်မည်</button>
-      <pre id="outBox">Response ဒီမှာ ပေါ်လာပါမည်။</pre>
+    <label for="voiceName">၃။ Voice Name (လိုအပ်မှ ထည့်ပါ၊ မထည့်လည်း ရပါတယ်)</label>
+    <input type="text" id="voiceName" placeholder="ဥပမာ - my-MM-Standard-A (အလွတ်ထားလည်း ရသည်)" />
+
+    <div class="btn-row">
+      <button type="button" class="btn-audio" id="btnAudio">မြန်မာအသံ (MP3) ထုတ်မည်</button>
+      <button type="button" class="btn-video" id="btnVideo">Video + Voice ပေါင်းထုတ်မည်</button>
+    </div>
+
+    <div class="status" id="statusBox">အဆင်သင့် ဖြစ်ပါပြီ။</div>
+
+    <div class="media-output">
+      <audio id="audioPlayer" controls style="display:none;"></audio>
+      <video id="videoPlayer" controls style="display:none;"></video>
     </div>
   </div>
 
   <script>
-    const charFile = document.getElementById("charFile");
-    const charImg = document.getElementById("charImg");
-    const charInfo = document.getElementById("charInfo");
-    const scriptBox = document.getElementById("scriptBox");
-    const sendBtn = document.getElementById("sendBtn");
-    const outBox = document.getElementById("outBox");
+    const charImageInput = document.getElementById("charImage");
+    const imgPreview = document.getElementById("imgPreview");
+    const scriptText = document.getElementById("scriptText");
+    const voiceNameInput = document.getElementById("voiceName");
+    const btnAudio = document.getElementById("btnAudio");
+    const btnVideo = document.getElementById("btnVideo");
+    const statusBox = document.getElementById("statusBox");
+    const audioPlayer = document.getElementById("audioPlayer");
+    const videoPlayer = document.getElementById("videoPlayer");
 
-    let charDataUrl = "";
+    let selectedImageBase64 = "";
 
-    charFile.addEventListener("change", (e) => {
-      const file = e.target.files[0];
+    charImageInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        charDataUrl = reader.result;
-        charImg.src = charDataUrl;
-        charInfo.textContent = `ရွေးပြီးပါပြီ: ${file.name}`;
+        selectedImageBase64 = reader.result;
+        imgPreview.src = selectedImageBase64;
+        imgPreview.style.display = "inline-block";
       };
       reader.readAsDataURL(file);
     });
 
-    sendBtn.addEventListener("click", async () => {
-      outBox.textContent = "Server သို့ ပို့နေပါသည်...";
+    function setBusy(busy, msg) {
+      btnAudio.disabled = busy;
+      btnVideo.disabled = busy;
+      statusBox.textContent = msg;
+    }
+
+    btnAudio.addEventListener("click", async () => {
+      const text = scriptText.value.trim();
+      if (!text) {
+        statusBox.textContent = "မြန်မာစာ script အရင် ရိုက်ထည့်ပါ။";
+        return;
+      }
+
       try {
-        const res = await fetch("/api/render-plan", {
+        setBusy(true, "မြန်မာအသံ (.mp3) ထုတ်နေပါတယ်...");
+        const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            script: scriptBox.value.trim(),
-            motionPrompt: `Keep character from image. Action matching: ${scriptBox.value.trim()}`,
-            hasCharacterImage: Boolean(charDataUrl)
+            text,
+            voiceName: voiceNameInput.value.trim()
           })
         });
-        const data = await res.json();
-        outBox.textContent = JSON.stringify(data, null, 2);
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "TTS ချိတ်ဆက်မှု မအောင်မြင်ပါ။");
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        audioPlayer.src = url;
+        audioPlayer.style.display = "block";
+        setBusy(false, "မြန်မာအသံ ထွက်လာပါပြီ — နားထောင်ကြည့်လို့ ရပါပြီ။");
       } catch (err) {
-        outBox.textContent = "Error: " + err.message;
+        setBusy(false, "Error: " + err.message);
+      }
+    });
+
+    btnVideo.addEventListener("click", async () => {
+      const text = scriptText.value.trim();
+      if (!selectedImageBase64) {
+        statusBox.textContent = "ဇာတ်ကောင်ပုံ တစ်ပုံ အရင် ရွေးပေးပါ။";
+        return;
+      }
+      if (!text) {
+        statusBox.textContent = "မြန်မာစာ script အရင် ရိုက်ထည့်ပါ။";
+        return;
+      }
+
+      try {
+        setBusy(true, "ဇာတ်ကောင်ပုံ + မြန်မာအသံ ပေါင်းပြီး Video (.mp4) ထုတ်နေပါတယ်...");
+        const res = await fetch("/api/merge-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            voiceName: voiceNameInput.value.trim(),
+            imageBase64: selectedImageBase64
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Video ပေါင်းစပ်မှု မအောင်မြင်ပါ။");
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        videoPlayer.src = url;
+        videoPlayer.style.display = "block";
+        setBusy(false, "Video + မြန်မာအသံ ပေါင်းစပ်ပြီးပါပြီ — ကြည့်လို့ ရပါပြီ။");
+      } catch (err) {
+        setBusy(false, "Error: " + err.message);
       }
     });
   </script>
