@@ -33,7 +33,7 @@
       font-size: 14px;
       color: #cbd5e1;
     }
-    textarea, input[type="text"], input[type="file"] {
+    textarea, input[type="file"] {
       width: 100%;
       padding: 10px 12px;
       border-radius: 10px;
@@ -121,15 +121,12 @@
     <label for="scriptText">၂။ မြန်မာစာ Script ရိုက်ထည့်ပါ</label>
     <textarea id="scriptText" placeholder="ဥပမာ - မင်္ဂလာပါ၊ ကျွန်တော်တို့ရဲ့ ဇာတ်လမ်းလေးကို အခု စတင်ပါတော့မယ်။"></textarea>
 
-    <label for="voiceName">၃။ Voice Name (လိုအပ်မှ ထည့်ပါ၊ မထည့်လည်း ရပါတယ်)</label>
-    <input type="text" id="voiceName" placeholder="ဥပမာ - my-MM-Standard-A (အလွတ်ထားလည်း ရသည်)" />
-
     <div class="btn-row">
       <button type="button" class="btn-audio" id="btnAudio">မြန်မာအသံ (MP3) ထုတ်မည်</button>
       <button type="button" class="btn-video" id="btnVideo">Video + Voice ပေါင်းထုတ်မည်</button>
     </div>
 
-    <div class="status" id="statusBox">အဆင်သင့် ဖြစ်ပါပြီ။</div>
+    <div class="status" id="statusBox">အဆင်သင့် ဖြစ်ပါပြီ။ (Card / API Key မလိုပါ)</div>
 
     <div class="media-output">
       <audio id="audioPlayer" controls style="display:none;"></audio>
@@ -141,7 +138,6 @@
     const charImageInput = document.getElementById("charImage");
     const imgPreview = document.getElementById("imgPreview");
     const scriptText = document.getElementById("scriptText");
-    const voiceNameInput = document.getElementById("voiceName");
     const btnAudio = document.getElementById("btnAudio");
     const btnVideo = document.getElementById("btnVideo");
     const statusBox = document.getElementById("statusBox");
@@ -180,10 +176,7 @@
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            voiceName: voiceNameInput.value.trim()
-          })
+          body: JSON.stringify({ text })
         });
 
         if (!res.ok) {
@@ -192,8 +185,7 @@
         }
 
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        audioPlayer.src = url;
+        audioPlayer.src = URL.createObjectURL(blob);
         audioPlayer.style.display = "block";
         setBusy(false, "မြန်မာအသံ ထွက်လာပါပြီ — နားထောင်ကြည့်လို့ ရပါပြီ။");
       } catch (err) {
@@ -219,7 +211,6 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text,
-            voiceName: voiceNameInput.value.trim(),
             imageBase64: selectedImageBase64
           })
         });
@@ -230,8 +221,7 @@
         }
 
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        videoPlayer.src = url;
+        videoPlayer.src = URL.createObjectURL(blob);
         videoPlayer.style.display = "block";
         setBusy(false, "Video + မြန်မာအသံ ပေါင်းစပ်ပြီးပါပြီ — ကြည့်လို့ ရပါပြီ။");
       } catch (err) {
