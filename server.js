@@ -1,168 +1,143 @@
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
-const fs = require("fs");
-const os = require("os");
-const { execFile } = require("child_process");
-const { promisify } = require("util");
-
-const execFileAsync = promisify(execFile);
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Render Environment Variables ထဲမှာ ထည့်ထားမယ့် Token & Model/Endpoint
+const HF_TOKEN = process.env.HF_TOKEN;
+const HF_VIDEO_MODEL =
+  process.env.HF_VIDEO_MODEL || "Wan-AI/Wan2.1-I2V-14B-480P";
+
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
+// Health check route (Render alive စစ်ရန်)
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.json({
+    status: "ok",
+    message: "Myanmar AI Video Maker backend is running.",
+    model: HF_VIDEO_MODEL,
+  });
 });
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", message: "Myanmar AI Video Server is running" });
-});
+// Action/Emotion ကို ဗီဒီယို prompt အဖြစ် ပြောင်းပေးမယ့် helper
+function buildMotionPrompt(action, scriptText) {
+  const actionMap = {
+    angry_turn_away:
+      "Dramatic cinematic shot, character looks angry and frustrated while speaking, then sharply turns head to the side and walks away from the frame.",
+    greeting_namaste:
+      "Polite warm expression, gentle head nod and respectful greeting gesture while speaking clearly.",
+    serious_dialogue:
+      "Serious expressive facial movements and natural subtle head motion while delivering lines.",
+    happy_energetic:
+      "Bright expressive smile and lively head movement while speaking with energy.",
+  };
 
-function getVoiceFilter(voiceType) {
-  switch (voiceType) {
-    case "male":
-      return "asetrate=24000*0.85,aresample=24000,atempo=1.32";
-    case "child":
-      return "asetrate=24000*1.18,aresample=24000,atempo=1.22";
-    case "female":
-    default:
-      return "atempo=1.25";
-  }
+  const baseMotion =
+    actionMap[action] ||
+    "Expressive acting, natural facial emotion and subtle head turn matching the dialogue.";
+
+  return `${baseMotion} Dialogue context: "${scriptText}". High detail, smooth motion, cinematic lighting.`;
 }
 
-async function synthesizeRawBurmeseMp3(text) {
-  const cleanText = text.trim();
-  const chunks = cleanText.match(/.{1,180}(?:\s|$|။|၊)/g) || [cleanText];
-  const buffers = [];
+// Main video generation endpoint
+app.post("/api/generate-video", async (req, res) => {
+  try {
+    const { imageBase64, script, action, voiceLang, audioBase64 } = req.body;
 
-  for (const part of chunks) {
-    const q = part.trim();
-    if (!q) continue;
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=my&q=${encodeURIComponent(q)}`;
-    const response = await fetch(url, {
+    if (!script || !script.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "Script စာသား ထည့်သွင်းရန် လိုအပ်ပါသည်။",
+      });
+    }
+
+    if (!HF_TOKEN) {
+      return res.status(500).json({
+        success: false,
+        error:
+          "Render Environment Variables ထဲတွင် HF_TOKEN မရှိသေးပါ။ ထည့်သွင်းပြီး Redeploy လုပ်ပါ။",
+      });
+    }
+
+    const motionPrompt = buildMotionPrompt(action, script.trim());
+
+    // Hugging Face Router / Inference API call
+    const hfUrl = `https://router.huggingface.co/hf-inference/models/${HF_VIDEO_MODEL}`;
+
+    const payload = {
+      inputs: motionPrompt,
+      parameters: {
+        // Model ပေါ်မူတည်ပြီး လိုအပ်သလို ချိန်ညှိနိုင်သည်
+        ...(imageBase64 ? { image: imageBase64 } : {}),
+        ...(audioBase64 ? { audio: audioBase64 } : {}),
+      },
+    };
+
+    const hfResponse = await fetch(hfUrl, {
+      method: "POST",
       headers: {
-        "User-Agent": "Mozilla/5.0"
-      }
+        Authorization: `Bearer ${HF_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     });
-    if (!response.ok) {
-      throw new Error("Free Burmese TTS server ကို ချိတ်ဆက်လို့ မရပါ။");
+
+    const contentType = hfResponse.headers.get("content-type") || "";
+
+    // ဗီဒီယို binary (mp4/webm/octet-stream) တိုက်ရိုက် ပြန်လာလျှင် base64 data URL အဖြစ် ပြန်ပို့မည်
+    if (
+      hfResponse.ok &&
+      (contentType.includes("video") ||
+        contentType.includes("application/octet-stream"))
+    ) {
+      const arrayBuffer = await hfResponse.arrayBuffer();
+      const base64Video = Buffer.from(arrayBuffer).toString("base64");
+      const mimeType = contentType.includes("video")
+        ? contentType
+        : "video/mp4";
+
+      return res.json({
+        success: true,
+        videoUrl: `data:${mimeType};base64,${base64Video}`,
+        promptUsed: motionPrompt,
+        voiceLang: voiceLang || "my-MM",
+      });
     }
-    const arrBuf = await response.arrayBuffer();
-    buffers.push(Buffer.from(arrBuf));
-  }
 
-  if (buffers.length === 0) {
-    throw new Error("အသံထုတ်ရန် စာသား မတွေ့ပါ။");
-  }
-
-  return Buffer.concat(buffers);
-}
-
-async function synthesizeStyledBurmeseMp3(text, voiceType = "female") {
-  const rawBuffer = await synthesizeRawBurmeseMp3(text);
-  const filter = getVoiceFilter(voiceType);
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mm-voice-"));
-  const inAudio = path.join(tmpDir, "raw.mp3");
-  const outAudio = path.join(tmpDir, "styled.mp3");
-
-  try {
-    fs.writeFileSync(inAudio, rawBuffer);
-    await execFileAsync("ffmpeg", [
-      "-y",
-      "-threads", "1",
-      "-i", inAudio,
-      "-af", filter,
-      "-c:a", "libmp3lame",
-      "-b:a", "96k",
-      outAudio
-    ]);
-    return fs.readFileSync(outAudio);
-  } finally {
+    // JSON response ပြန်လာလျှင်
+    const rawText = await hfResponse.text();
+    let parsedJson = null;
     try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch (_) {}
-  }
-}
-
-app.post("/api/tts", async (req, res) => {
-  try {
-    const { text, voiceType } = req.body || {};
-    if (!text || !text.trim()) {
-      return res.status(400).json({ ok: false, error: "မြန်မာစာ text ထည့်ပေးပါ။" });
+      parsedJson = JSON.parse(rawText);
+    } catch (_) {
+      parsedJson = null;
     }
 
-    const audioBuffer = await synthesizeStyledBurmeseMp3(text, voiceType);
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.send(audioBuffer);
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-app.post("/api/merge-video", async (req, res) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mm-video-"));
-  const imagePath = path.join(tmpDir, "character.jpg");
-  const audioPath = path.join(tmpDir, "voice.mp3");
-  const outputPath = path.join(tmpDir, "output.mp4");
-
-  try {
-    let { text, voiceType, imageBase64 } = req.body || {};
-
-    if (!text || !text.trim()) {
-      return res.status(400).json({ ok: false, error: "မြန်မာစာ script ထည့်ပေးပါ။" });
-    }
-    if (!imageBase64) {
-      return res.status(400).json({ ok: false, error: "ဇာတ်ကောင်ပုံ တစ်ပုံ ရွေးပေးပါ။" });
+    if (!hfResponse.ok) {
+      return res.status(hfResponse.status).json({
+        success: false,
+        error:
+          (parsedJson && (parsedJson.error || parsedJson.message)) ||
+          `Hugging Face API error (${hfResponse.status}): ${rawText.slice(0, 300)}`,
+        promptUsed: motionPrompt,
+      });
     }
 
-    const base64Clean = imageBase64.includes(",")
-      ? imageBase64.split(",")[1]
-      : imageBase64;
-    fs.writeFileSync(imagePath, Buffer.from(base64Clean, "base64"));
-    imageBase64 = null;
-
-    const audioBuffer = await synthesizeStyledBurmeseMp3(text, voiceType);
-    fs.writeFileSync(audioPath, audioBuffer);
-
-    // 480p + ဖြည်းဖြည်း zoom/pan လှုပ်ရှားမှု (3D camera motion အသွင်)
-    const vfFilter =
-      "scale='min(960,iw)':-2," +
-      "zoompan=z='min(zoom+0.0015,1.22)':x='iw/2-(iw/zoom/2)+sin(on*0.04)*25':y='ih/2-(ih/zoom/2)+cos(on*0.03)*15':d=150:s=480x854:fps=15," +
-      "format=yuv420p";
-
-    await execFileAsync("ffmpeg", [
-      "-y",
-      "-threads", "1",
-      "-i", imagePath,
-      "-i", audioPath,
-      "-vf", vfFilter,
-      "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-c:a", "aac",
-      "-b:a", "96k",
-      "-shortest",
-      "-movflags", "+faststart",
-      outputPath
-    ]);
-
-    res.setHeader("Content-Type", "video/mp4");
-    const stream = fs.createReadStream(outputPath);
-    stream.on("close", () => {
-      try {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      } catch (_) {}
+    return res.json({
+      success: true,
+      data: parsedJson,
+      promptUsed: motionPrompt,
     });
-    stream.pipe(res);
   } catch (err) {
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch (_) {}
-    res.status(500).json({ ok: false, error: err.message });
+    console.error("Generate video error:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Server side error occurred.",
+    });
   }
 });
 
