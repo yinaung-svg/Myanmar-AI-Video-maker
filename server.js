@@ -22,19 +22,16 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Myanmar AI Video Server is running" });
 });
 
-// ယောက်ျားလေး / မိန်းခလေး / ကလေး အလိုက် ပုံမှန်စကားပြောနှုန်းနဲ့ FFmpeg audio filter ညှိခြင်း
+// ပိုမြန်ပြီး ပုံမှန်ပြောနှုန်းနီးပါး ဖြစ်အောင် ညှိထားသော filter
 function getVoiceFilter(voiceType) {
   switch (voiceType) {
     case "male":
-      // ပုံမှန်စကားပြောနှုန်းနဲ့ အသံနည်းနည်းလေးတဲ့ ယောက်ျားလေးလေသံ
-      return "asetrate=24000*0.84,aresample=24000,atempo=1.18";
+      return "asetrate=24000*0.85,aresample=24000,atempo=1.32";
     case "child":
-      // ပုံမှန်စကားပြောနှုန်းနဲ့ ကလေးလေသံ
-      return "asetrate=24000*1.18,aresample=24000,atempo=1.05";
+      return "asetrate=24000*1.18,aresample=24000,atempo=1.22";
     case "female":
     default:
-      // ပုံမှန်ပြောတဲ့လေသံ (အမြန်နှုန်းနည်းနည်းတင်ထားတယ်)
-      return "atempo=1.12";
+      return "atempo=1.25";
   }
 }
 
