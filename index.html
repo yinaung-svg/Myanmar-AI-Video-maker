@@ -3,242 +3,383 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Myanmar AI Video Maker (DAZZLE)</title>
+  <title>Burmese Talking Avatar Studio</title>
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
     body {
       margin: 0;
-      padding: 20px;
-      font-family: system-ui, -apple-system, sans-serif;
-      background: #0f1117;
-      color: #f3f4f6;
-    }
-    .container {
-      max-width: 640px;
-      margin: 0 auto;
-      background: #181b24;
-      padding: 20px;
-      border-radius: 14px;
-      border: 1px solid #2a2f3d;
-    }
-    h1 {
-      margin: 0 0 16px;
-      font-size: 20px;
-      color: #ffffff;
-    }
-    label {
-      display: block;
-      margin-top: 14px;
-      margin-bottom: 6px;
-      font-size: 14px;
-      color: #cbd5e1;
-    }
-    textarea, select, input[type="file"] {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid #333a4d;
-      background: #0f1117;
-      color: #ffffff;
-      font-size: 14px;
-    }
-    textarea {
-      min-height: 110px;
-      resize: vertical;
-    }
-    .preview-box {
-      margin-top: 10px;
-      text-align: center;
-    }
-    .preview-box img {
-      max-width: 100%;
-      max-height: 220px;
-      border-radius: 10px;
-      display: none;
-      border: 1px solid #333a4d;
-    }
-    .btn-row {
+      padding: 16px;
+      background: #0f172a;
+      color: #f8fafc;
       display: flex;
-      gap: 10px;
-      margin-top: 18px;
-      flex-wrap: wrap;
+      justify-content: center;
     }
+    .app {
+      width: 100%;
+      max-width: 520px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    }
+    h2 { margin: 0 0 14px; font-size: 18px; color: #38bdf8; }
+    .field { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 6px; font-size: 13px; color: #cbd5e1; }
+    select, textarea, input[type="file"] {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 10px;
+      font-size: 14px;
+    }
+    textarea { min-height: 84px; resize: vertical; }
+    .row { display: flex; gap: 10px; }
     button {
       flex: 1;
-      min-width: 160px;
-      padding: 12px 14px;
+      padding: 11px 14px;
       border: none;
       border-radius: 10px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
     }
-    .btn-audio {
-      background: #2563eb;
-      color: #fff;
-    }
-    .btn-video {
-      background: #16a34a;
-      color: #fff;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    .status {
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-secondary { background: #475569; color: #fff; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .stage-wrap {
       margin-top: 14px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #11141c;
-      border: 1px solid #2a2f3d;
-      font-size: 13px;
-      color: #93c5fd;
-      min-height: 40px;
-    }
-    .media-output {
-      margin-top: 18px;
+      background: #090d16;
+      border-radius: 12px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      align-items: center;
+      border: 1px solid #334155;
     }
-    audio, video {
+    canvas {
       width: 100%;
+      max-width: 320px;
+      aspect-ratio: 9 / 16;
       border-radius: 10px;
-      background: #000;
+      background: #020617;
     }
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #93c5fd;
+      min-height: 20px;
+      text-align: center;
+    }
+    .fine-tune {
+      margin-top: 10px;
+      padding: 10px;
+      background: #0f172a;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      font-size: 12px;
+    }
+    .range-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .range-row input { flex: 1; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Myanmar AI Video Maker</h1>
+  <div class="app">
+    <h2>Burmese Talking Avatar (Self-Coded)</h2>
 
-    <label for="charImage">၁။ ဇာတ်ကောင်ပုံ ရွေးပါ</label>
-    <input type="file" id="charImage" accept="image/*" />
-    <div class="preview-box">
-      <img id="imgPreview" alt="Character Preview" />
+    <div class="field">
+      <label>၁။ ဇာတ်ကောင်ပုံ ရွေးပါ</label>
+      <input type="file" id="imageInput" accept="image/*" />
     </div>
 
-    <label for="voiceType">၂။ အသံအမျိုးအစား ရွေးပါ</label>
-    <select id="voiceType">
-      <option value="female">မိန်းခလေးသံ (မူလအသံ)</option>
-      <option value="male">ယောက်ျားလေးသံ (အသံလေးနက်)</option>
-      <option value="child">ကလေးသံ (အသံမြင့်)</option>
-    </select>
-
-    <label for="scriptText">၃။ မြန်မာစာ Script ရိုက်ထည့်ပါ</label>
-    <textarea id="scriptText" placeholder="ဥပမာ - မင်္ဂလာပါ၊ ကျွန်တော်တို့ရဲ့ ဇာတ်လမ်းလေးကို အခု စတင်ပါတော့မယ်။"></textarea>
-
-    <div class="btn-row">
-      <button type="button" class="btn-audio" id="btnAudio">မြန်မာအသံ (MP3) ထုတ်မည်</button>
-      <button type="button" class="btn-video" id="btnVideo">Video + Voice ပေါင်းထုတ်မည်</button>
+    <div class="field">
+      <label>၂။ အသံအမျိုးအစား ရွေးပါ</label>
+      <select id="voiceType">
+        <option value="male">ယောက်ျားလေးသံ</option>
+        <option value="female">မိန်းကလေးသံ</option>
+        <option value="child">ကလေးသံ</option>
+      </select>
     </div>
 
-    <div class="status" id="statusBox">အဆင်သင့် ဖြစ်ပါပြီ။</div>
+    <div class="field">
+      <label>၃။ မြန်မာစာ Script ရိုက်ထည့်ပါ</label>
+      <textarea id="scriptText">မင်္ဂလာပါဗျာ၊ ကျွန်တော့်နာမည် ဒဇယ် ဖြစ်ပါတယ်</textarea>
+    </div>
 
-    <div class="media-output">
-      <audio id="audioPlayer" controls style="display:none;"></audio>
-      <video id="videoPlayer" controls style="display:none;"></video>
+    <div class="fine-tune">
+      <div><strong>ပါးစပ်လှုပ်မယ့် နေရာ ညှိရန် (Mouth Position):</strong></div>
+      <div class="range-row">
+        <span>အထက်/အောက် (Y):</span>
+        <input type="range" id="mouthY" min="35" max="80" value="62" />
+        <span id="mouthYVal">62%</span>
+      </div>
+      <div class="range-row">
+        <span>ဘယ်/ညာ (X):</span>
+        <input type="range" id="mouthX" min="30" max="70" value="50" />
+        <span id="mouthXVal">50%</span>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top: 12px;">
+      <button class="btn-primary" id="generateBtn">အသံထုတ်ပြီး စပြောမည်</button>
+      <button class="btn-secondary" id="downloadMp3Btn" disabled>MP3 သိမ်းမည်</button>
+    </div>
+
+    <div class="stage-wrap">
+      <canvas id="avatarCanvas" width="480" height="854"></canvas>
+      <div class="status" id="statusText">အသင့်ဖြစ်ပါပြီ။</div>
     </div>
   </div>
 
   <script>
-    const charImageInput = document.getElementById("charImage");
-    const imgPreview = document.getElementById("imgPreview");
-    const voiceTypeSelect = document.getElementById("voiceType");
-    const scriptText = document.getElementById("scriptText");
-    const btnAudio = document.getElementById("btnAudio");
-    const btnVideo = document.getElementById("btnVideo");
-    const statusBox = document.getElementById("statusBox");
-    const audioPlayer = document.getElementById("audioPlayer");
-    const videoPlayer = document.getElementById("videoPlayer");
+    const imageInput = document.getElementById("imageInput");
+    const voiceTypeEl = document.getElementById("voiceType");
+    const scriptTextEl = document.getElementById("scriptText");
+    const generateBtn = document.getElementById("generateBtn");
+    const downloadMp3Btn = document.getElementById("downloadMp3Btn");
+    const statusText = document.getElementById("statusText");
+    const canvas = document.getElementById("avatarCanvas");
+    const ctx = canvas.getContext("2d");
 
-    let selectedImageBase64 = "";
+    const mouthYSlider = document.getElementById("mouthY");
+    const mouthXSlider = document.getElementById("mouthX");
+    const mouthYVal = document.getElementById("mouthYVal");
+    const mouthXVal = document.getElementById("mouthXVal");
 
-    charImageInput.addEventListener("change", (e) => {
+    let avatarImg = new Image();
+    let hasImage = false;
+    let currentAudioBlob = null;
+    let audioCtx = null;
+    let analyser = null;
+    let dataArray = null;
+    let audioEl = null;
+    let isTalking = false;
+    let mood = "neutral"; // greeting, question, excited, neutral
+
+    mouthYSlider.addEventListener("input", () => {
+      mouthYVal.textContent = mouthYSlider.value + "%";
+    });
+    mouthXSlider.addEventListener("input", () => {
+      mouthXVal.textContent = mouthXSlider.value + "%";
+    });
+
+    imageInput.addEventListener("change", (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        selectedImageBase64 = reader.result;
-        imgPreview.src = selectedImageBase64;
-        imgPreview.style.display = "inline-block";
+        avatarImg = new Image();
+        avatarImg.onload = () => {
+          hasImage = true;
+          statusText.textContent = "ပုံတင်ပြီးပါပြီ။ ပါးစပ်နေရာကို လိုအပ်ရင် ညှိနိုင်ပါတယ်။";
+        };
+        avatarImg.src = reader.result;
       };
       reader.readAsDataURL(file);
     });
 
-    function setBusy(busy, msg) {
-      btnAudio.disabled = busy;
-      btnVideo.disabled = busy;
-      statusBox.textContent = msg;
+    function detectMood(text) {
+      if (/မင်္ဂလာ|ဟယ်လို|နှုတ်ဆက်|ကျွန်တော်|ကျွန်မ/.test(text)) return "greeting";
+      if (/\?|လား|ဘယ်|ဘာ|မလား/.test(text)) return "question";
+      if (/!|ဝမ်းသာ|ကောင်း|အရမ်း|ဟုတ်/.test(text)) return "excited";
+      return "neutral";
     }
 
-    btnAudio.addEventListener("click", async () => {
-      const text = scriptText.value.trim();
+    function getVolumeLevel() {
+      if (!analyser || !dataArray || !isTalking) return 0;
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      const count = Math.min(dataArray.length, 32);
+      for (let i = 0; i < count; i++) {
+        sum += dataArray[i];
+      }
+      const avg = sum / count;
+      return Math.min(1, Math.max(0, (avg - 12) / 95));
+    }
+
+    function drawScene(timeSec) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#0b1120";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const vol = getVolumeLevel();
+      const moodSpeed = mood === "excited" ? 14 : mood === "greeting" ? 10 : 8;
+      const headBob = isTalking
+        ? Math.sin(timeSec * moodSpeed) * (3 + vol * 6)
+        : Math.sin(timeSec * 2) * 1.5;
+      const headTilt = isTalking
+        ? Math.sin(timeSec * (moodSpeed * 0.6)) * 0.025
+        : 0;
+
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2 + headBob);
+      ctx.rotate(headTilt);
+
+      if (hasImage) {
+        // ပုံကို 480x854 ထဲ cover/fit လှလှပပ ဆွဲမည်
+        const imgRatio = avatarImg.width / avatarImg.height;
+        const boxRatio = canvas.width / canvas.height;
+        let drawW, drawH;
+        if (imgRatio > boxRatio) {
+          drawH = canvas.height * 0.96;
+          drawW = drawH * imgRatio;
+        } else {
+          drawW = canvas.width * 0.96;
+          drawH = drawW / imgRatio;
+        }
+        ctx.drawImage(avatarImg, -drawW / 2, -drawH / 2, drawW, drawH);
+      } else {
+        ctx.fillStyle = "#1e293b";
+        ctx.beginPath();
+        ctx.arc(0, -40, 95, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "22px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("ပုံတစ်ပုံ ရွေးပါ", 0, 110);
+      }
+
+      // ပါးစပ် / အမူအရာ လှုပ်ရှားမှု Overlay
+      const mx = ((Number(mouthXSlider.value) - 50) / 100) * canvas.width;
+      const my = ((Number(mouthYSlider.value) - 50) / 100) * canvas.height;
+
+      const mouthWave = Math.abs(Math.sin(timeSec * (moodSpeed * 1.4)));
+      const openAmount = isTalking ? Math.max(0.12, vol * 0.85 + mouthWave * 0.35) : 0;
+
+      if (isTalking || !hasImage) {
+        const mouthWidth = mood === "greeting" ? 34 + vol * 14 : 28 + vol * 12;
+        const mouthHeight = 4 + openAmount * 22;
+
+        // နှုတ်ခမ်း/ပါးစပ်အတွင်းပိုင်း
+        ctx.save();
+        ctx.translate(mx, my);
+
+        // ပါးစပ်ဖွင့်ဟန်
+        ctx.beginPath();
+        ctx.ellipse(0, 0, mouthWidth / 2, mouthHeight / 2, 0, 0, Math.PI * 2);
+        ctx.fillStyle = openAmount > 0.18 ? "#450a0a" : "rgba(185, 28, 28, 0.45)";
+        ctx.fill();
+
+        // ပါးစပ်အတွင်း လျှာ/အရောင်
+        if (openAmount > 0.25) {
+          ctx.beginPath();
+          ctx.ellipse(0, mouthHeight * 0.18, mouthWidth * 0.32, mouthHeight * 0.28, 0, 0, Math.PI * 2);
+          ctx.fillStyle = "#e11d48";
+          ctx.fill();
+        }
+
+        // နှုတ်ခမ်းမျဉ်း
+        ctx.beginPath();
+        if (mood === "greeting" || mood === "excited") {
+          ctx.arc(0, -2, mouthWidth * 0.48, 0.15 * Math.PI, 0.85 * Math.PI);
+        } else {
+          ctx.moveTo(-mouthWidth / 2, 0);
+          ctx.lineTo(mouthWidth / 2, 0);
+        }
+        ctx.strokeStyle = "rgba(254, 205, 211, 0.85)";
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // နှုတ်ဆက်/ဝမ်းသာအမူအရာ ဘေးဘက် glow/sparkle လေး
+        if (mood === "greeting" || mood === "excited") {
+          const pulse = 0.4 + 0.4 * Math.sin(timeSec * 8);
+          ctx.fillStyle = `rgba(250, 204, 21, ${pulse})`;
+          ctx.beginPath();
+          ctx.arc(-55, -70, 5, 0, Math.PI * 2);
+          ctx.arc(55, -70, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      ctx.restore();
+      requestAnimationFrame((t) => drawScene(t / 1000));
+    }
+
+    requestAnimationFrame((t) => drawScene(t / 1000));
+
+    generateBtn.addEventListener("click", async () => {
+      const text = scriptTextEl.value.trim();
+      const voiceType = voiceTypeEl.value;
       if (!text) {
-        statusBox.textContent = "မြန်မာစာ script အရင် ရိုက်ထည့်ပါ။";
+        statusText.textContent = "မြန်မာစာ script ထည့်ပေးပါ။";
         return;
       }
 
+      generateBtn.disabled = true;
+      mood = detectMood(text);
+      statusText.textContent = "မြန်မာအသံ ထုတ်နေပါတယ်...";
+
       try {
-        setBusy(true, "မြန်မာအသံ (.mp3) ထုတ်နေပါတယ်...");
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            voiceType: voiceTypeSelect.value
-          })
+          body: JSON.stringify({ text, voiceType })
         });
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || "TTS ချိတ်ဆက်မှု မအောင်မြင်ပါ။");
+          throw new Error(errData.error || "အသံထုတ်ရာတွင် အမှားဖြစ်ပါသည်။");
         }
 
-        const blob = await res.blob();
-        audioPlayer.src = URL.createObjectURL(blob);
-        audioPlayer.style.display = "block";
-        setBusy(false, "မြန်မာအသံ ထွက်လာပါပြီ — နားထောင်ကြည့်လို့ ရပါပြီ။");
+        currentAudioBlob = await res.blob();
+        downloadMp3Btn.disabled = false;
+
+        const audioUrl = URL.createObjectURL(currentAudioBlob);
+        if (audioEl) {
+          audioEl.pause();
+        }
+        audioEl = new Audio(audioUrl);
+        audioEl.crossOrigin = "anonymous";
+
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+          const src = audioCtx.createMediaElementSource(audioEl);
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 128;
+          dataArray = new Uint8Array(analyser.frequencyBinCount);
+          src.connect(analyser);
+          analyser.connect(audioCtx.destination);
+        }
+
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume();
+        }
+
+        audioEl.onplay = () => {
+          isTalking = true;
+          statusText.textContent = `စကားပြောနေပါတယ် (${mood})...`;
+        };
+        audioEl.onended = () => {
+          isTalking = false;
+          statusText.textContent = "ပြောပြီးပါပြီ။";
+        };
+
+        await audioEl.play();
       } catch (err) {
-        setBusy(false, "Error: " + err.message);
+        isTalking = false;
+        statusText.textContent = "Error: " + err.message;
+      } finally {
+        generateBtn.disabled = false;
       }
     });
 
-    btnVideo.addEventListener("click", async () => {
-      const text = scriptText.value.trim();
-      if (!selectedImageBase64) {
-        statusBox.textContent = "ဇာတ်ကောင်ပုံ တစ်ပုံ အရင် ရွေးပေးပါ။";
-        return;
-      }
-      if (!text) {
-        statusBox.textContent = "မြန်မာစာ script အရင် ရိုက်ထည့်ပါ။";
-        return;
-      }
-
-      try {
-        setBusy(true, "ဇာတ်ကောင်ပုံ + မြန်မာအသံ ပေါင်းပြီး Video (.mp4) ထုတ်နေပါတယ်...");
-        const res = await fetch("/api/merge-video", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            voiceType: voiceTypeSelect.value,
-            imageBase64: selectedImageBase64
-          })
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || "Video ပေါင်းစပ်မှု မအောင်မြင်ပါ။");
-        }
-
-        const blob = await res.blob();
-        videoPlayer.src = URL.createObjectURL(blob);
-        videoPlayer.style.display = "block";
-        setBusy(false, "Video + မြန်မာအသံ ပေါင်းစပ်ပြီးပါပြီ — ကြည့်လို့ ရပါပြီ။");
-      } catch (err) {
-        setBusy(false, "Error: " + err.message);
-      }
+    downloadMp3Btn.addEventListener("click", () => {
+      if (!currentAudioBlob) return;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(currentAudioBlob);
+      a.download = "burmese-voice.mp3";
+      a.click();
     });
   </script>
 </body>
