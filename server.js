@@ -22,10 +22,24 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Myanmar AI Video Server is running" });
 });
 
-// Card မလိုဘဲ Google Translate TTS endpoint ကနေ မြန်မာ MP3 audio buffer ရယူခြင်း
-async function synthesizeFreeBurmeseMp3(text) {
+// ယောက်ျားလေး / မိန်းခလေး / ကလေး အလိုက် FFmpeg audio filter ညှိခြင်း
+function getVoiceFilter(voiceType) {
+  switch (voiceType) {
+    case "male":
+      // အသံနည်းနည်းလေးပြီး ယောက်ျားလေးသံဘက် ပြောင်းခြင်း
+      return "asetrate=24000*0.80,aresample=24000,atempo=1.05";
+    case "child":
+      // အသံနည်းနည်းမြှင့်ပြီး ကလေးသံဘက် ပြောင်းခြင်း
+      return "asetrate=24000*1.22,aresample=24000,atempo=0.95";
+    case "female":
+    default:
+      // မူလအသံ
+      return "anull";
+  }
+}
+
+async function synthesizeRawBurmeseMp3(text) {
   const cleanText = text.trim();
-  // စာကြောင်းရှည်ရင် ၁၈၀ စာလုံးဝန်းကျင် ခွဲပြီး ထုတ်ယူမယ်
   const chunks = cleanText.match(/.{1,180}(?:\s|$|။|၊)/g) || [cleanText];
   const buffers = [];
 
@@ -52,15 +66,45 @@ async function synthesizeFreeBurmeseMp3(text) {
   return Buffer.concat(buffers);
 }
 
+async function synthesizeStyledBurmeseMp3(text, voiceType = "female") {
+  const rawBuffer = await synthesizeRawBurmeseMp3(text);
+  const filter = getVoiceFilter(voiceType);
+
+  if (filter === "anull") {
+    return rawBuffer;
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mm-voice-"));
+  const inAudio = path.join(tmpDir, "raw.mp3");
+  const outAudio = path.join(tmpDir, "styled.mp3");
+
+  try {
+    fs.writeFileSync(inAudio, rawBuffer);
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i", inAudio,
+      "-af", filter,
+      "-c:a", "libmp3lame",
+      "-q:a", "3",
+      outAudio
+    ]);
+    return fs.readFileSync(outAudio);
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch (_) {}
+  }
+}
+
 // 1) မြန်မာအသံ (.mp3) ထုတ်ပေးမယ့် endpoint
 app.post("/api/tts", async (req, res) => {
   try {
-    const { text } = req.body || {};
+    const { text, voiceType } = req.body || {};
     if (!text || !text.trim()) {
       return res.status(400).json({ ok: false, error: "မြန်မာစာ text ထည့်ပေးပါ။" });
     }
 
-    const audioBuffer = await synthesizeFreeBurmeseMp3(text);
+    const audioBuffer = await synthesizeStyledBurmeseMp3(text, voiceType);
     res.setHeader("Content-Type", "audio/mpeg");
     res.send(audioBuffer);
   } catch (err) {
@@ -76,7 +120,7 @@ app.post("/api/merge-video", async (req, res) => {
   const outputPath = path.join(tmpDir, "output.mp4");
 
   try {
-    const { text, imageBase64 } = req.body || {};
+    const { text, voiceType, imageBase64 } = req.body || {};
 
     if (!text || !text.trim()) {
       return res.status(400).json({ ok: false, error: "မြန်မာစာ script ထည့်ပေးပါ။" });
@@ -90,7 +134,7 @@ app.post("/api/merge-video", async (req, res) => {
       : imageBase64;
     fs.writeFileSync(imagePath, Buffer.from(base64Clean, "base64"));
 
-    const audioBuffer = await synthesizeFreeBurmeseMp3(text);
+    const audioBuffer = await synthesizeStyledBurmeseMp3(text, voiceType);
     fs.writeFileSync(audioPath, audioBuffer);
 
     await execFileAsync("ffmpeg", [
