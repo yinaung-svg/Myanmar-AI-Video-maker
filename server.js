@@ -22,19 +22,19 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Myanmar AI Video Server is running" });
 });
 
-// ယောက်ျားလေး / မိန်းခလေး / ကလေး အလိုက် FFmpeg audio filter ညှိခြင်း
+// ယောက်ျားလေး / မိန်းခလေး / ကလေး အလိုက် ပုံမှန်စကားပြောနှုန်းနဲ့ FFmpeg audio filter ညှိခြင်း
 function getVoiceFilter(voiceType) {
   switch (voiceType) {
     case "male":
-      // အသံနည်းနည်းလေးပြီး ယောက်ျားလေးသံဘက် ပြောင်းခြင်း
-      return "asetrate=24000*0.80,aresample=24000,atempo=1.05";
+      // ပုံမှန်စကားပြောနှုန်းနဲ့ အသံနည်းနည်းလေးတဲ့ ယောက်ျားလေးလေသံ
+      return "asetrate=24000*0.84,aresample=24000,atempo=1.18";
     case "child":
-      // အသံနည်းနည်းမြှင့်ပြီး ကလေးသံဘက် ပြောင်းခြင်း
-      return "asetrate=24000*1.22,aresample=24000,atempo=0.95";
+      // ပုံမှန်စကားပြောနှုန်းနဲ့ ကလေးလေသံ
+      return "asetrate=24000*1.18,aresample=24000,atempo=1.05";
     case "female":
     default:
-      // မူလအသံ
-      return "anull";
+      // ပုံမှန်ပြောတဲ့လေသံ (အမြန်နှုန်းနည်းနည်းတင်ထားတယ်)
+      return "atempo=1.12";
   }
 }
 
@@ -69,10 +69,6 @@ async function synthesizeRawBurmeseMp3(text) {
 async function synthesizeStyledBurmeseMp3(text, voiceType = "female") {
   const rawBuffer = await synthesizeRawBurmeseMp3(text);
   const filter = getVoiceFilter(voiceType);
-
-  if (filter === "anull") {
-    return rawBuffer;
-  }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mm-voice-"));
   const inAudio = path.join(tmpDir, "raw.mp3");
