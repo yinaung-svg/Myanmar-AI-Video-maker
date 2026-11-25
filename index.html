@@ -33,7 +33,7 @@
       font-size: 14px;
       color: #cbd5e1;
     }
-    textarea, input[type="file"] {
+    textarea, select, input[type="file"] {
       width: 100%;
       padding: 10px 12px;
       border-radius: 10px;
@@ -118,7 +118,14 @@
       <img id="imgPreview" alt="Character Preview" />
     </div>
 
-    <label for="scriptText">၂။ မြန်မာစာ Script ရိုက်ထည့်ပါ</label>
+    <label for="voiceType">၂။ အသံအမျိုးအစား ရွေးပါ</label>
+    <select id="voiceType">
+      <option value="female">မိန်းခလေးသံ (မူလအသံ)</option>
+      <option value="male">ယောက်ျားလေးသံ (အသံလေးနက်)</option>
+      <option value="child">ကလေးသံ (အသံမြင့်)</option>
+    </select>
+
+    <label for="scriptText">၃။ မြန်မာစာ Script ရိုက်ထည့်ပါ</label>
     <textarea id="scriptText" placeholder="ဥပမာ - မင်္ဂလာပါ၊ ကျွန်တော်တို့ရဲ့ ဇာတ်လမ်းလေးကို အခု စတင်ပါတော့မယ်။"></textarea>
 
     <div class="btn-row">
@@ -126,7 +133,7 @@
       <button type="button" class="btn-video" id="btnVideo">Video + Voice ပေါင်းထုတ်မည်</button>
     </div>
 
-    <div class="status" id="statusBox">အဆင်သင့် ဖြစ်ပါပြီ။ (Card / API Key မလိုပါ)</div>
+    <div class="status" id="statusBox">အဆင်သင့် ဖြစ်ပါပြီ။</div>
 
     <div class="media-output">
       <audio id="audioPlayer" controls style="display:none;"></audio>
@@ -137,6 +144,7 @@
   <script>
     const charImageInput = document.getElementById("charImage");
     const imgPreview = document.getElementById("imgPreview");
+    const voiceTypeSelect = document.getElementById("voiceType");
     const scriptText = document.getElementById("scriptText");
     const btnAudio = document.getElementById("btnAudio");
     const btnVideo = document.getElementById("btnVideo");
@@ -176,7 +184,10 @@
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text })
+          body: JSON.stringify({
+            text,
+            voiceType: voiceTypeSelect.value
+          })
         });
 
         if (!res.ok) {
@@ -211,6 +222,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text,
+            voiceType: voiceTypeSelect.value,
             imageBase64: selectedImageBase64
           })
         });
