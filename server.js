@@ -129,17 +129,20 @@ app.post("/api/merge-video", async (req, res) => {
     const audioBuffer = await synthesizeStyledBurmeseMp3(text, voiceType);
     fs.writeFileSync(audioPath, audioBuffer);
 
+    // 480p + ဖြည်းဖြည်း zoom/pan လှုပ်ရှားမှု (3D camera motion အသွင်)
+    const vfFilter =
+      "scale='min(960,iw)':-2," +
+      "zoompan=z='min(zoom+0.0015,1.22)':x='iw/2-(iw/zoom/2)+sin(on*0.04)*25':y='ih/2-(ih/zoom/2)+cos(on*0.03)*15':d=150:s=480x854:fps=15," +
+      "format=yuv420p";
+
     await execFileAsync("ffmpeg", [
       "-y",
       "-threads", "1",
-      "-loop", "1",
-      "-framerate", "12",
       "-i", imagePath,
       "-i", audioPath,
-      "-vf", "scale='min(480,iw)':-2,format=yuv420p",
+      "-vf", vfFilter,
       "-c:v", "libx264",
       "-preset", "ultrafast",
-      "-tune", "stillimage",
       "-c:a", "aac",
       "-b:a", "96k",
       "-shortest",
