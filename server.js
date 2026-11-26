@@ -15,7 +15,6 @@ app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-// Uncaught error ကြောင့် Server တစ်ခုလုံး Crash မဖြစ်အောင် ကာကွယ်ခြင်း
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err);
 });
@@ -53,12 +52,16 @@ function buildMotionPrompt(action, scriptText) {
   return `${baseMotion} Dialogue context: "${scriptText}". High detail, smooth motion, cinematic lighting.`;
 }
 
-function base64ToBlob(dataUrl) {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || "");
-  if (!match) return null;
-  const mimeType = match[1] || "image/jpeg";
-  const buffer = Buffer.from(match[2], "base64");
-  return new Blob([buffer], { type: mimeType });
+function base64ToBlob(dataUrl, fallbackMime = "image/jpeg") {
+  if (!dataUrl || typeof dataUrl !== "string") return null;
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (match) {
+    const mimeType = match[1] || fallbackMime;
+    const buffer = Buffer.from(match[2], "base64");
+    return new Blob([buffer], { type: mimeType });
+  }
+  const buffer = Buffer.from(dataUrl, "base64");
+  return buffer.length > 0 ? new Blob([buffer], { type: fallbackMime }) : null;
 }
 
 function extractVideoUrlFromGradioData(data, spaceId) {
@@ -84,71 +87,129 @@ function extractVideoUrlFromGradioData(data, spaceId) {
   return null;
 }
 
-async function callGradioSpace({ spaceId, prompt, imageBase64 }) {
+function mapParameterValue(param, { prompt, imageFileInput, audioFileInput }) {
+  const pName = (param.parameter_name || param.label || "").toLowerCase();
+  const component = (param.component || "").toLowerCase();
+
+  // 1) Dropdown / Choice (enum) ရှိရင် list ထဲက တန်ဖိုးတစ်ခုကိုပဲ ပြန်ပေးရမည်
+  if (Array.isArray(param.enum) && param.enum.length > 0) {
+    if (param.parameter_has_default && param.parameter_default !== undefined) {
+      return param.parameter_default;
+    }
+    return param.enum.includes(512) ? 512 : param.enum[0];
+  }
+
+  // 2) Image input
+  if (
+    component === "image" ||
+    pName.includes("image") ||
+    pName.includes("img") ||
+    pName.includes("face") ||
+    pName.includes("source") ||
+    pName.includes("portrait")
+  ) {
+    return imageFileInput || null;
+  }
+
+  // 3) Audio input
+  if (
+    component === "audio" ||
+    pName.includes("audio") ||
+    pName.includes("voice") ||
+    pName.includes("speech")
+  ) {
+    return audioFileInput || null;
+  }
+
+  // 4) Prompt / Text input
+  if (
+    component === "textbox" ||
+    pName.includes("prompt") ||
+    pName.includes("text") ||
+    pName.includes("script") ||
+    pName.includes("caption")
+  ) {
+    return prompt;
+  }
+
+  // 5) Boolean / Checkbox
+  if (component === "checkbox" || param.type === "boolean") {
+    return param.parameter_has_default ? Boolean(param.parameter_default) : false;
+  }
+
+  // 6) Number / Slider
+  if (
+    component === "slider" ||
+    component === "number" ||
+    param.type === "number" ||
+    param.type === "integer"
+  ) {
+    if (param.parameter_has_default && param.parameter_default !== undefined) {
+      return param.parameter_default;
+    }
+    return typeof param.minimum === "number" ? param.minimum : 0;
+  }
+
+  // 7) Default fallback
+  if (param.parameter_has_default && param.parameter_default !== undefined) {
+    return param.parameter_default;
+  }
+  return null;
+}
+
+async function callGradioSpace({ spaceId, prompt, imageBase64, audioBase64 }) {
   try {
     const { Client, handle_file } = await import("@gradio/client");
     const client = await Client.connect(spaceId, {
       ...(HF_TOKEN ? { hf_token: HF_TOKEN } : {}),
     });
 
-    // Space ရဲ့ available endpoints ကို စစ်ဆေးခြင်း
-    let endpointNames = [];
-    let endpointSchemas = {};
-    try {
-      const apiInfo = await client.view_api();
-      const named = apiInfo?.named_endpoints || {};
-      endpointNames = Object.keys(named);
-      endpointSchemas = named;
-    } catch (_) {
-      endpointNames = [];
-    }
+    const apiInfo = await client.view_api();
+    const namedEndpoints = apiInfo?.named_endpoints || {};
+    const endpointNames = Object.keys(namedEndpoints);
 
     if (endpointNames.length === 0) {
       return {
         ok: false,
-        error: `Space (${spaceId}) တွင် API endpoint မတွေ့ပါ (Space sleep/pause ဖြစ်နေနိုင်သည် သို့မဟုတ် API မဖွင့်ထားပါ)။`,
+        error: `Space (${spaceId}) တွင် named endpoint မတွေ့ပါ။`,
       };
     }
 
-    const blob = imageBase64 ? base64ToBlob(imageBase64) : null;
-    const fileInput = blob ? handle_file(blob) : null;
+    // /generate_video ကို ပထမဦးစားပေး ရှာမယ်၊ မရှိရင် ကျန်တာတွေကို စမ်းမယ်
+    const orderedEndpoints = [
+      ...endpointNames.filter((ep) => ep.includes("generate") || ep.includes("video")),
+      ...endpointNames.filter((ep) => !ep.includes("generate") && !ep.includes("video")),
+    ];
+
+    const imgBlob = imageBase64 ? base64ToBlob(imageBase64, "image/jpeg") : null;
+    const imageFileInput = imgBlob ? handle_file(imgBlob) : null;
+
+    const audBlob = audioBase64 ? base64ToBlob(audioBase64, "audio/wav") : null;
+    const audioFileInput = audBlob ? handle_file(audBlob) : null;
 
     let lastErr = "";
-    for (const ep of endpointNames) {
+    for (const ep of orderedEndpoints) {
       try {
-        const schema = endpointSchemas[ep] || {};
+        const schema = namedEndpoints[ep] || {};
         const params = Array.isArray(schema.parameters) ? schema.parameters : [];
 
-        // Named parameters ရှိရင် parameter name အလိုက် ထည့်ပေးမယ်
-        let result;
-        if (params.length > 0) {
-          const args = params.map((p) => {
-            const pName = (p.parameter_name || p.label || "").toLowerCase();
-            const isImage =
-              p.component === "Image" ||
-              pName.includes("image") ||
-              pName.includes("img") ||
-              pName.includes("face") ||
-              pName.includes("source");
-            const isPrompt =
-              pName.includes("prompt") ||
-              pName.includes("text") ||
-              pName.includes("script");
+        const args = params.map((p) =>
+          mapParameterValue(p, { prompt, imageFileInput, audioFileInput })
+        );
 
-            if (isImage && fileInput) return fileInput;
-            if (isPrompt) return prompt;
-            return p.parameter_has_default ? undefined : null;
-          });
-          result = await client.predict(ep, args);
-        } else {
-          result = await client.predict(ep, fileInput ? [fileInput, prompt] : [prompt]);
-        }
-
+        const result = await client.predict(ep, args);
         const videoUrl = extractVideoUrlFromGradioData(result?.data, spaceId);
+
         if (videoUrl) {
-          return { ok: true, videoUrl, endpointUsed: ep, data: result?.data };
+          return {
+            ok: true,
+            videoUrl,
+            endpointUsed: ep,
+            data: result?.data,
+          };
         }
-        lastErr = `Endpoint (${ep}) မှ video output မရရှိပါ။`;
+
+        lastErr = `Endpoint (${ep}) မှ video output ပြန်မလာပါ (output: ${JSON.stringify(result?.data).slice(0, 200)})`;
       } catch (epErr) {
         lastErr = epErr.message || String(epErr);
       }
@@ -229,7 +290,9 @@ app.post("/api/generate-video", async (req, res) => {
         spaceId: HF_VIDEO_SPACE,
         prompt: motionPrompt,
         imageBase64,
+        audioBase64,
       });
+
       if (spaceResult.ok && spaceResult.videoUrl) {
         return res.json({
           success: true,
@@ -243,6 +306,7 @@ app.post("/api/generate-video", async (req, res) => {
           hasAudioInput: Boolean(audioBase64),
         });
       }
+
       return res.status(502).json({
         success: false,
         error: spaceResult.error,
