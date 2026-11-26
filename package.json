@@ -1,8 +1,11 @@
 {
   "name": "myanmar-ai-video-maker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Backend for AI Talking Avatar & Video Generation on Render",
   "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.js"
   },
