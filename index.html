@@ -120,7 +120,7 @@
       max-width: 220px;
       max-height: 220px;
       border-radius: 12px;
-      margin-top: 12px;
+      margin: 12px auto 0;
       display: none;
       object-fit: cover;
       border: 1px solid var(--border);
@@ -133,7 +133,8 @@
       margin-top: 12px;
     }
 
-    button {
+    button,
+    .btn-download {
       border: none;
       border-radius: 12px;
       padding: 12px 16px;
@@ -141,9 +142,15 @@
       font-weight: 600;
       cursor: pointer;
       transition: opacity 0.15s ease, transform 0.1s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
     }
 
-    button:active {
+    button:active,
+    .btn-download:active {
       transform: scale(0.99);
     }
 
@@ -168,6 +175,14 @@
     .btn-tts {
       background: var(--accent-2);
       color: #062118;
+    }
+
+    .btn-download {
+      background: var(--accent-2);
+      color: #062118;
+      width: 100%;
+      margin-top: 12px;
+      display: none;
     }
 
     .status-box {
@@ -231,10 +246,20 @@
       </div>
 
       <div class="field">
+        <label for="modelSelect">AI Video Model ရွေးချယ်ရန်</label>
+        <select id="modelSelect">
+          <option value="Wan-AI/Wan2.1-I2V-14B-480P">Wan 2.1 Image-to-Video (ပုံမှ ဗီဒီယိုပြောင်းရန်)</option>
+          <option value="Wan-AI/Wan2.1-T2V-1.3B">Wan 2.1 Text-to-Video (စာသားမှ ဗီဒီယိုထုတ်ရန်)</option>
+          <option value="Lightricks/LTX-Video">LTX-Video</option>
+          <option value="tencent/HunyuanVideo">HunyuanVideo</option>
+        </select>
+      </div>
+
+      <div class="field">
         <label for="imageInput">၁။ ဇာတ်ကောင် ဓာတ်ပုံ ရွေးပါ</label>
         <div class="upload-box">
           <input type="file" id="imageInput" accept="image/*" />
-          <div class="hint">မျက်နှာ/ကိုယ်ပိုင်း ရှင်းလင်းတဲ့ ဓာတ်ပုံတစ်ပုံ ရွေးပါ။</div>
+          <div class="hint">မျက်နှာ/ကိုယ်ပိုင်း ရှင်းလင်းတဲ့ ဓာတ်ပုံတစ်ပုံ ရွေးပါ (အလိုအလျောက် Resize လုပ်ပေးပါမည်)။</div>
           <img id="imagePreview" class="preview-img" alt="Selected character preview" />
         </div>
       </div>
@@ -242,8 +267,8 @@
       <div class="field">
         <label for="actionSelect">၂။ အမူအရာ / လှုပ်ရှားမှု (Action & Emotion)</label>
         <select id="actionSelect">
-          <option value="angry_turn_away">စိတ်တိုပြီး ပြောပြီး မျက်နှာကို တစ်ဖက်လှည့်ထွက်သွားပုံ</option>
           <option value="greeting_namaste">ယဉ်ကျေးစွာ နှုတ်ဆက်ဟန်နဲ့ စကားပြောပုံ</option>
+          <option value="angry_turn_away">စိတ်တိုပြီး ပြောပြီး မျက်နှာကို တစ်ဖက်လှည့်ထွက်သွားပုံ</option>
           <option value="serious_dialogue">စိတ်အားထက်သန်စွာ စကားပြောပုံ</option>
           <option value="happy_energetic">ပျော်ရွှင်တက်ကြွစွာ စကားပြောပုံ</option>
         </select>
@@ -261,7 +286,7 @@
         <label for="scriptInput">၄။ ပြောစေချင်သော စကားလုံး (Script)</label>
         <textarea
           id="scriptInput"
-          placeholder="ဥပမာ - မင်းလုပ်ရပ်ကို ငါလုံးဝ လက်မခံနိုင်ဘူး၊ အခုချက်ချင်း ထွက်သွားပါ..."
+          placeholder="ဥပမာ - မင်္ဂလာပါ ကျွန်တော့်နာမည် ဒဇယ် ဖြစ်ပါတယ်..."
         ></textarea>
         <div class="btn-row">
           <button type="button" class="btn-tts" id="speakBtn">🔊 စာသားကို အသံနဲ့ စမ်းနားထောင်မည်</button>
@@ -282,12 +307,14 @@
     <div class="card">
       <label>ထွက်လာသော ဗီဒီယို (Output Video)</label>
       <video id="outputVideo" controls playsinline></video>
-      <div class="hint">ဗီဒီယို ထွက်လာပါက ဤနေရာတွင် တိုက်ရိုက် ကြည့်ရှုနိုင်ပါသည်။</div>
+      <a id="downloadBtn" class="btn-download" download="dazzle-ai-video.mp4">⬇️ ဗီဒီယို Download ဆွဲမည်</a>
+      <div class="hint">ဗီဒီယို ထွက်လာပါက ဤနေရာတွင် တိုက်ရိုက် ကြည့်ရှုပြီး Download ဆွဲနိုင်ပါသည်။</div>
     </div>
   </div>
 
   <script>
     const backendUrlEl = document.getElementById("backendUrl");
+    const modelSelectEl = document.getElementById("modelSelect");
     const imageInputEl = document.getElementById("imageInput");
     const imagePreviewEl = document.getElementById("imagePreview");
     const actionSelectEl = document.getElementById("actionSelect");
@@ -300,6 +327,7 @@
     const statusBoxEl = document.getElementById("statusBox");
     const promptPreviewEl = document.getElementById("promptPreview");
     const outputVideoEl = document.getElementById("outputVideo");
+    const downloadBtnEl = document.getElementById("downloadBtn");
 
     let selectedImageBase64 = "";
 
@@ -310,8 +338,38 @@
       if (type === "ok") statusBoxEl.classList.add("status-ok");
     }
 
-    // ဓာတ်ပုံကို Base64 အဖြစ် ဖတ်ယူခြင်း
-    imageInputEl.addEventListener("change", (e) => {
+    function compressImageToBase64(file, maxSize = 720, quality = 0.85) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            let { width, height } = img;
+            if (width > maxSize || height > maxSize) {
+              if (width > height) {
+                height = Math.round((height * maxSize) / width);
+                width = maxSize;
+              } else {
+                width = Math.round((width * maxSize) / height);
+                height = maxSize;
+              }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", quality));
+          };
+          img.onerror = reject;
+          img.src = event.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    imageInputEl.addEventListener("change", async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) {
         selectedImageBase64 = "";
@@ -319,17 +377,18 @@
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        selectedImageBase64 = reader.result;
-        imagePreviewEl.src = reader.result;
+      try {
+        setStatus("ဓာတ်ပုံကို ပြင်ဆင်နေပါသည်...", "normal");
+        selectedImageBase64 = await compressImageToBase64(file);
+        imagePreviewEl.src = selectedImageBase64;
         imagePreviewEl.style.display = "block";
-        setStatus(`ဓာတ်ပုံ ရွေးပြီးပါပြီ - ${file.name}`, "ok");
-      };
-      reader.readAsDataURL(file);
+        modelSelectEl.value = "Wan-AI/Wan2.1-I2V-14B-480P";
+        setStatus(`ဓာတ်ပုံ အသင့်ဖြစ်ပါပြီ - ${file.name}`, "ok");
+      } catch (err) {
+        setStatus("ဓာတ်ပုံ ဖတ်ရာတွင် အမှားဖြစ်ပွားပါသည်။", "error");
+      }
     });
 
-    // Website TTS စမ်းနားထောင်ခြင်း
     speakBtnEl.addEventListener("click", () => {
       const text = scriptInputEl.value.trim();
       if (!text) {
@@ -363,7 +422,6 @@
       setStatus("အသံရပ်လိုက်ပါပြီ။", "normal");
     });
 
-    // Render Backend ကျန်းမာရေး စစ်ဆေးခြင်း
     testHealthBtnEl.addEventListener("click", async () => {
       const baseUrl = backendUrlEl.value.trim().replace(/\/+$/, "");
       if (!baseUrl) {
@@ -392,12 +450,12 @@
       }
     });
 
-    // 3D Video ထုတ်ယူခြင်း
     generateBtnEl.addEventListener("click", async () => {
       const baseUrl = backendUrlEl.value.trim().replace(/\/+$/, "");
       const script = scriptInputEl.value.trim();
       const action = actionSelectEl.value;
       const voiceLang = voiceLangEl.value;
+      const modelId = modelSelectEl.value;
 
       if (!baseUrl) {
         setStatus("Render Backend URL ထည့်ပါ။", "error");
@@ -411,6 +469,7 @@
 
       generateBtnEl.disabled = true;
       promptPreviewEl.style.display = "none";
+      downloadBtnEl.style.display = "none";
       setStatus(
         "ဗီဒီယို ထုတ်နေပါသည်... (Free tier ဖြစ်သဖြင့် ခဏကြာနိုင်ပါသည်)",
         "normal"
@@ -427,6 +486,7 @@
             script,
             action,
             voiceLang,
+            modelId,
           }),
         });
 
@@ -445,6 +505,8 @@
           outputVideoEl.src = result.videoUrl;
           outputVideoEl.load();
           outputVideoEl.play().catch(() => {});
+          downloadBtnEl.href = result.videoUrl;
+          downloadBtnEl.style.display = "inline-flex";
           setStatus("ဗီဒီယို အောင်မြင်စွာ ထွက်လာပါပြီ။", "ok");
         } else {
           setStatus(
