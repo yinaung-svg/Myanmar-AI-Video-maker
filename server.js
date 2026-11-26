@@ -8,13 +8,20 @@ const PORT = process.env.PORT || 3000;
 const HF_TOKEN = process.env.HF_TOKEN || "";
 const HF_VIDEO_MODEL =
   process.env.HF_VIDEO_MODEL || "Wan-AI/Wan2.1-I2V-14B-480P";
-// Gradio Space ဥပမာ: "Wan-AI/Wan2.1" သို့မဟုတ် ကိုယ်သုံးမယ့် Space ID
 const HF_VIDEO_SPACE = process.env.HF_VIDEO_SPACE || "";
 const FAL_KEY = process.env.FAL_KEY || "";
 
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+
+// Uncaught error ကြောင့် Server တစ်ခုလုံး Crash မဖြစ်အောင် ကာကွယ်ခြင်း
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
+});
 
 app.get("/", (req, res) => {
   res.json({
@@ -46,70 +53,117 @@ function buildMotionPrompt(action, scriptText) {
   return `${baseMotion} Dialogue context: "${scriptText}". High detail, smooth motion, cinematic lighting.`;
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+function base64ToBlob(dataUrl) {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || "");
+  if (!match) return null;
+  const mimeType = match[1] || "image/jpeg";
+  const buffer = Buffer.from(match[2], "base64");
+  return new Blob([buffer], { type: mimeType });
 }
 
-// Hugging Face Gradio Space ခေါ်ဆိုခြင်း (@gradio/client dynamic import)
-async function callGradioSpace({ spaceId, prompt, imageBase64 }) {
-  if (!spaceId) {
-    return {
-      ok: false,
-      error:
-        "HF_VIDEO_SPACE မသတ်မှတ်ရသေးပါ (Render Env တွင် HF_VIDEO_SPACE ထည့်ပါ သို့မဟုတ် FAL_KEY ထည့်ပါ)။",
-    };
-  }
-
-  const { Client, handle_file } = await import("@gradio/client");
-  const client = await Client.connect(spaceId, {
-    ...(HF_TOKEN ? { hf_token: HF_TOKEN } : {}),
-  });
-
-  // Base64 ကို Blob/File အဖြစ် ပြောင်းပြီး handle_file ပို့ရန်
-  let imageFile = null;
-  if (imageBase64) {
-    const res = await fetch(imageBase64);
-    const blob = await res.blob();
-    imageFile = handle_file(blob);
-  }
-
-  // Space API endpoint အလိုက် predict/submit စမ်းသပ်ခြင်း
-  const inputs = imageFile ? [imageFile, prompt] : [prompt];
-  const result = await client.predict(0, inputs).catch(async () => {
-    return await client.predict("/generate", {
-      ...(imageFile ? { image: imageFile } : {}),
-      prompt,
-    });
-  });
-
-  const dataArr = Array.isArray(result?.data) ? result.data : [result?.data];
-  for (const item of dataArr) {
+function extractVideoUrlFromGradioData(data, spaceId) {
+  const items = Array.isArray(data) ? data : [data];
+  for (const item of items) {
     if (!item) continue;
-    if (typeof item === "string" && (item.startsWith("http") || item.startsWith("data:video"))) {
-      return { ok: true, videoUrl: item, data: result.data };
+    if (
+      typeof item === "string" &&
+      (item.startsWith("http") || item.startsWith("data:video"))
+    ) {
+      return item;
     }
     if (typeof item === "object") {
-      const url = item.url || item.video?.url || item.path || null;
-      if (url) {
-        const fullUrl = url.startsWith("http")
-          ? url
-          : `https://${spaceId.replace("/", "-")}.hf.space/file=${url}`;
-        return { ok: true, videoUrl: fullUrl, data: result.data };
+      const candidate =
+        item.url || item.video?.url || item.path || item.value?.url || null;
+      if (candidate && typeof candidate === "string") {
+        if (candidate.startsWith("http")) return candidate;
+        const cleanPath = candidate.replace(/^\/+/, "");
+        return `https://${spaceId.replace("/", "-")}.hf.space/gradio_api/file=${cleanPath}`;
       }
     }
   }
+  return null;
+}
 
-  return {
-    ok: false,
-    error: "Gradio Space မှ video URL ပြန်မလာပါ (Space input/output format မကိုက်ညီဖြစ်နိုင်ပါသည်)။",
-    data: result?.data,
-  };
+async function callGradioSpace({ spaceId, prompt, imageBase64 }) {
+  try {
+    const { Client, handle_file } = await import("@gradio/client");
+    const client = await Client.connect(spaceId, {
+      ...(HF_TOKEN ? { hf_token: HF_TOKEN } : {}),
+    });
+
+    // Space ရဲ့ available endpoints ကို စစ်ဆေးခြင်း
+    let endpointNames = [];
+    let endpointSchemas = {};
+    try {
+      const apiInfo = await client.view_api();
+      const named = apiInfo?.named_endpoints || {};
+      endpointNames = Object.keys(named);
+      endpointSchemas = named;
+    } catch (_) {
+      endpointNames = [];
+    }
+
+    if (endpointNames.length === 0) {
+      return {
+        ok: false,
+        error: `Space (${spaceId}) တွင် API endpoint မတွေ့ပါ (Space sleep/pause ဖြစ်နေနိုင်သည် သို့မဟုတ် API မဖွင့်ထားပါ)။`,
+      };
+    }
+
+    const blob = imageBase64 ? base64ToBlob(imageBase64) : null;
+    const fileInput = blob ? handle_file(blob) : null;
+
+    let lastErr = "";
+    for (const ep of endpointNames) {
+      try {
+        const schema = endpointSchemas[ep] || {};
+        const params = Array.isArray(schema.parameters) ? schema.parameters : [];
+
+        // Named parameters ရှိရင် parameter name အလိုက် ထည့်ပေးမယ်
+        let result;
+        if (params.length > 0) {
+          const args = params.map((p) => {
+            const pName = (p.parameter_name || p.label || "").toLowerCase();
+            const isImage =
+              p.component === "Image" ||
+              pName.includes("image") ||
+              pName.includes("img") ||
+              pName.includes("face") ||
+              pName.includes("source");
+            const isPrompt =
+              pName.includes("prompt") ||
+              pName.includes("text") ||
+              pName.includes("script");
+
+            if (isImage && fileInput) return fileInput;
+            if (isPrompt) return prompt;
+            return p.parameter_has_default ? undefined : null;
+          });
+          result = await client.predict(ep, args);
+        } else {
+          result = await client.predict(ep, fileInput ? [fileInput, prompt] : [prompt]);
+        }
+
+        const videoUrl = extractVideoUrlFromGradioData(result?.data, spaceId);
+        if (videoUrl) {
+          return { ok: true, videoUrl, endpointUsed: ep, data: result?.data };
+        }
+        lastErr = `Endpoint (${ep}) မှ video output မရရှိပါ။`;
+      } catch (epErr) {
+        lastErr = epErr.message || String(epErr);
+      }
+    }
+
+    return {
+      ok: false,
+      error: `Gradio Space (${spaceId}) ကို ခေါ်ရာတွင် အဆင်မပြေပါ: ${lastErr} (Available endpoints: ${endpointNames.join(", ")})`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Gradio Space connection error: ${err.message || String(err)}`,
+    };
+  }
 }
 
 async function callFalFallback({ prompt, imageBase64 }) {
@@ -123,7 +177,7 @@ async function callFalFallback({ prompt, imageBase64 }) {
     ? { prompt, image_url: imageBase64, aspect_ratio: "9:16" }
     : { prompt, aspect_ratio: "9:16" };
 
-  const response = await fetchWithTimeout(endpoint, {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       Authorization: `Key ${FAL_KEY}`,
@@ -155,7 +209,6 @@ app.post("/api/generate-video", async (req, res) => {
     const activeModel = (modelId && String(modelId).trim()) || HF_VIDEO_MODEL;
     const motionPrompt = buildMotionPrompt(action, script.trim());
 
-    // 1) FAL_KEY ရှိရင် fal.ai ဖြင့် တိုက်ရိုက်ထုတ်ခြင်း
     if (FAL_KEY) {
       const falResult = await callFalFallback({ prompt: motionPrompt, imageBase64 });
       if (falResult && falResult.ok && falResult.videoUrl) {
@@ -171,7 +224,6 @@ app.post("/api/generate-video", async (req, res) => {
       }
     }
 
-    // 2) HF_VIDEO_SPACE သတ်မှတ်ထားရင် Gradio Space ဖြင့် ထုတ်ခြင်း
     if (HF_VIDEO_SPACE) {
       const spaceResult = await callGradioSpace({
         spaceId: HF_VIDEO_SPACE,
@@ -182,6 +234,7 @@ app.post("/api/generate-video", async (req, res) => {
         return res.json({
           success: true,
           provider: `gradio-space (${HF_VIDEO_SPACE})`,
+          endpointUsed: spaceResult.endpointUsed,
           modelUsed: activeModel,
           videoUrl: spaceResult.videoUrl,
           data: spaceResult.data,
@@ -197,21 +250,17 @@ app.post("/api/generate-video", async (req, res) => {
       });
     }
 
-    // 3) နှစ်ခုလုံး မထည့်ရသေးပါက ရှင်းလင်းသော ညွှန်ကြားချက်ပြန်ပို့ခြင်း
     return res.status(404).json({
       success: false,
       error:
-        "Hugging Face Router (router.huggingface.co) တွင် ဤ Video Model endpoint (404 Not Found) မရရှိပါ[span_5](start_span)[span_5](end_span)။ Render Environment Variables ထဲတွင် HF_VIDEO_SPACE (ဥပမာ Gradio Video Space) သို့မဟုတ် FAL_KEY ထည့်သွင်းပြီး Redeploy လုပ်ပါ။",
+        "Hugging Face Router (router.huggingface.co) တွင် ဤ Video Model endpoint (404 Not Found) မရရှိပါ။ Render Environment Variables ထဲတွင် HF_VIDEO_SPACE သို့မဟုတ် FAL_KEY ထည့်သွင်းပြီး Redeploy လုပ်ပါ။",
       promptUsed: motionPrompt,
     });
   } catch (err) {
     console.error("Generate video error:", err);
-    const isTimeout = err.name === "AbortError";
-    return res.status(isTimeout ? 504 : 500).json({
+    return res.status(500).json({
       success: false,
-      error: isTimeout
-        ? "ဗီဒီယို ထုတ်ရာတွင် အချိန်ကြာသွားပါသည် (Timeout)။ ထပ်မံ ကြိုးစားကြည့်ပါ။"
-        : err.message || "Server side error occurred.",
+      error: err.message || "Server side error occurred.",
     });
   }
 });
