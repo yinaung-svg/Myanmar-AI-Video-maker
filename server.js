@@ -5,28 +5,28 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const HF_TOKEN = process.env.HF_TOKEN;
+const HF_TOKEN = process.env.HF_TOKEN || "";
 const HF_VIDEO_MODEL =
   process.env.HF_VIDEO_MODEL || "Wan-AI/Wan2.1-I2V-14B-480P";
-const HF_PROVIDER = process.env.HF_PROVIDER || ""; // ဥပမာ fal-ai, replicate, hf-inference (ဗလာထားလျှင် auto)
+// Gradio Space ဥပမာ: "Wan-AI/Wan2.1" သို့မဟုတ် ကိုယ်သုံးမယ့် Space ID
+const HF_VIDEO_SPACE = process.env.HF_VIDEO_SPACE || "";
 const FAL_KEY = process.env.FAL_KEY || "";
 
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-// Health check route
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
     message: "Myanmar AI Video Maker backend is running.",
     model: HF_VIDEO_MODEL,
+    space: HF_VIDEO_SPACE || "not set",
     hasHfToken: Boolean(HF_TOKEN),
     hasFalKey: Boolean(FAL_KEY),
   });
 });
 
-// Action/Emotion ကို ဗီဒီယို prompt အဖြစ် ပြောင်းပေးမယ့် helper
 function buildMotionPrompt(action, scriptText) {
   const actionMap = {
     angry_turn_away:
@@ -46,7 +46,6 @@ function buildMotionPrompt(action, scriptText) {
   return `${baseMotion} Dialogue context: "${scriptText}". High detail, smooth motion, cinematic lighting.`;
 }
 
-// Fetch helper with timeout
 async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -57,96 +56,62 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
   }
 }
 
-// Hugging Face Router API ခေါ်ဆိုခြင်း (provider သတ်မှတ်နိုင်သည်)
-async function callHuggingFaceRouter({ model, prompt, imageBase64, provider }) {
-  if (!HF_TOKEN) {
+// Hugging Face Gradio Space ခေါ်ဆိုခြင်း (@gradio/client dynamic import)
+async function callGradioSpace({ spaceId, prompt, imageBase64 }) {
+  if (!spaceId) {
     return {
       ok: false,
-      status: 500,
-      error: "Render Environment Variables ထဲတွင် HF_TOKEN မရှိသေးပါ။",
+      error:
+        "HF_VIDEO_SPACE မသတ်မှတ်ရသေးပါ (Render Env တွင် HF_VIDEO_SPACE ထည့်ပါ သို့မဟုတ် FAL_KEY ထည့်ပါ)။",
     };
   }
 
-  const headers = {
-    Authorization: `Bearer ${HF_TOKEN}`,
-    "Content-Type": "application/json",
-  };
-  if (provider) {
-    headers["X-HF-Provider"] = provider;
-  }
-
-  // Provider-specific route သို့မဟုတ် default router route
-  const baseRouterUrl = provider
-    ? `https://router.huggingface.co/${provider}/models/${model}`
-    : `https://router.huggingface.co/models/${model}`;
-
-  const parameters = {};
-  if (imageBase64) {
-    // data:image/jpeg;base64,... prefix ရှိရင် ခွဲထုတ်နိုင်ရန် ထည့်ပေးသည်
-    parameters.image = imageBase64;
-  }
-
-  const response = await fetchWithTimeout(baseRouterUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      inputs: prompt,
-      ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
-    }),
+  const { Client, handle_file } = await import("@gradio/client");
+  const client = await Client.connect(spaceId, {
+    ...(HF_TOKEN ? { hf_token: HF_TOKEN } : {}),
   });
 
-  const contentType = response.headers.get("content-type") || "";
-
-  if (
-    response.ok &&
-    (contentType.includes("video") ||
-      contentType.includes("application/octet-stream"))
-  ) {
-    const arrayBuffer = await response.arrayBuffer();
-    const base64Video = Buffer.from(arrayBuffer).toString("base64");
-    const mimeType = contentType.includes("video")
-      ? contentType
-      : "video/mp4";
-    return {
-      ok: true,
-      videoUrl: `data:${mimeType};base64,${base64Video}`,
-    };
+  // Base64 ကို Blob/File အဖြစ် ပြောင်းပြီး handle_file ပို့ရန်
+  let imageFile = null;
+  if (imageBase64) {
+    const res = await fetch(imageBase64);
+    const blob = await res.blob();
+    imageFile = handle_file(blob);
   }
 
-  const rawText = await response.text();
-  let parsedJson = null;
-  try {
-    parsedJson = JSON.parse(rawText);
-  } catch (_) {
-    parsedJson = null;
-  }
+  // Space API endpoint အလိုက် predict/submit စမ်းသပ်ခြင်း
+  const inputs = imageFile ? [imageFile, prompt] : [prompt];
+  const result = await client.predict(0, inputs).catch(async () => {
+    return await client.predict("/generate", {
+      ...(imageFile ? { image: imageFile } : {}),
+      prompt,
+    });
+  });
 
-  if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      error:
-        (parsedJson && (parsedJson.error || parsedJson.message)) ||
-        `HF Router error (${response.status}): ${rawText.slice(0, 300)}`,
-    };
+  const dataArr = Array.isArray(result?.data) ? result.data : [result?.data];
+  for (const item of dataArr) {
+    if (!item) continue;
+    if (typeof item === "string" && (item.startsWith("http") || item.startsWith("data:video"))) {
+      return { ok: true, videoUrl: item, data: result.data };
+    }
+    if (typeof item === "object") {
+      const url = item.url || item.video?.url || item.path || null;
+      if (url) {
+        const fullUrl = url.startsWith("http")
+          ? url
+          : `https://${spaceId.replace("/", "-")}.hf.space/file=${url}`;
+        return { ok: true, videoUrl: fullUrl, data: result.data };
+      }
+    }
   }
-
-  // JSON ထဲမှာ video url ပြန်လာခဲ့ရင်
-  const extractedUrl =
-    parsedJson?.videoUrl ||
-    parsedJson?.video?.url ||
-    parsedJson?.output?.url ||
-    (Array.isArray(parsedJson) && parsedJson[0]?.url) ||
-    null;
 
   return {
-    ok: true,
-    videoUrl: extractedUrl,
-    data: parsedJson,
+    ok: false,
+    error: "Gradio Space မှ video URL ပြန်မလာပါ (Space input/output format မကိုက်ညီဖြစ်နိုင်ပါသည်)။",
+    data: result?.data,
   };
 }
 
-// Optional Fallback: FAL_KEY ထည့်ထားလျှင် fal.ai Wan I2V / T2V ကို ခေါ်သုံးခြင်း
 async function callFalFallback({ prompt, imageBase64 }) {
   if (!FAL_KEY) return null;
 
@@ -155,15 +120,8 @@ async function callFalFallback({ prompt, imageBase64 }) {
     : "https://fal.run/fal-ai/wan/v2.1/text-to-video";
 
   const body = imageBase64
-    ? {
-        prompt,
-        image_url: imageBase64,
-        aspect_ratio: "9:16",
-      }
-    : {
-        prompt,
-        aspect_ratio: "9:16",
-      };
+    ? { prompt, image_url: imageBase64, aspect_ratio: "9:16" }
+    : { prompt, aspect_ratio: "9:16" };
 
   const response = await fetchWithTimeout(endpoint, {
     method: "POST",
@@ -183,17 +141,9 @@ async function callFalFallback({ prompt, imageBase64 }) {
   return { ok: true, videoUrl, data };
 }
 
-// Main video generation endpoint
 app.post("/api/generate-video", async (req, res) => {
   try {
-    const {
-      imageBase64,
-      script,
-      action,
-      voiceLang,
-      modelId,
-      audioBase64,
-    } = req.body;
+    const { imageBase64, script, action, voiceLang, modelId, audioBase64 } = req.body;
 
     if (!script || !script.trim()) {
       return res.status(400).json({
@@ -205,54 +155,14 @@ app.post("/api/generate-video", async (req, res) => {
     const activeModel = (modelId && String(modelId).trim()) || HF_VIDEO_MODEL;
     const motionPrompt = buildMotionPrompt(action, script.trim());
 
-    // 1) Hugging Face Router ဖြင့် စမ်းသပ်ခြင်း
-    let hfResult = await callHuggingFaceRouter({
-      model: activeModel,
-      prompt: motionPrompt,
-      imageBase64,
-      provider: HF_PROVIDER,
-    });
-
-    // hf-inference ပံ့ပိုးမပေးတဲ့ error ဖြစ်ပြီး provider မသတ်မှတ်ရသေးရင် fal-ai provider နဲ့ ထပ်စမ်းမည်
-    if (
-      !hfResult.ok &&
-      !HF_PROVIDER &&
-      /not supported by provider/i.test(hfResult.error || "")
-    ) {
-      hfResult = await callHuggingFaceRouter({
-        model: activeModel,
-        prompt: motionPrompt,
-        imageBase64,
-        provider: "fal-ai",
-      });
-    }
-
-    if (hfResult.ok) {
-      return res.json({
-        success: true,
-        provider: HF_PROVIDER || "huggingface-router",
-        modelUsed: activeModel,
-        videoUrl: hfResult.videoUrl,
-        data: hfResult.data,
-        promptUsed: motionPrompt,
-        voiceLang: voiceLang || "my-MM",
-        hasAudioInput: Boolean(audioBase64),
-      });
-    }
-
-    // 2) FAL_KEY ရှိရင် fal.ai direct fallback ဖြင့် ထပ်စမ်းမည်
+    // 1) FAL_KEY ရှိရင် fal.ai ဖြင့် တိုက်ရိုက်ထုတ်ခြင်း
     if (FAL_KEY) {
-      const falResult = await callFalFallback({
-        prompt: motionPrompt,
-        imageBase64,
-      });
-      if (falResult && falResult.ok) {
+      const falResult = await callFalFallback({ prompt: motionPrompt, imageBase64 });
+      if (falResult && falResult.ok && falResult.videoUrl) {
         return res.json({
           success: true,
           provider: "fal.ai",
-          modelUsed: imageBase64
-            ? "fal-ai/wan/v2.1/image-to-video"
-            : "fal-ai/wan/v2.1/text-to-video",
+          modelUsed: activeModel,
           videoUrl: falResult.videoUrl,
           data: falResult.data,
           promptUsed: motionPrompt,
@@ -261,11 +171,37 @@ app.post("/api/generate-video", async (req, res) => {
       }
     }
 
-    return res.status(hfResult.status || 400).json({
+    // 2) HF_VIDEO_SPACE သတ်မှတ်ထားရင် Gradio Space ဖြင့် ထုတ်ခြင်း
+    if (HF_VIDEO_SPACE) {
+      const spaceResult = await callGradioSpace({
+        spaceId: HF_VIDEO_SPACE,
+        prompt: motionPrompt,
+        imageBase64,
+      });
+      if (spaceResult.ok && spaceResult.videoUrl) {
+        return res.json({
+          success: true,
+          provider: `gradio-space (${HF_VIDEO_SPACE})`,
+          modelUsed: activeModel,
+          videoUrl: spaceResult.videoUrl,
+          data: spaceResult.data,
+          promptUsed: motionPrompt,
+          voiceLang: voiceLang || "my-MM",
+          hasAudioInput: Boolean(audioBase64),
+        });
+      }
+      return res.status(502).json({
+        success: false,
+        error: spaceResult.error,
+        promptUsed: motionPrompt,
+      });
+    }
+
+    // 3) နှစ်ခုလုံး မထည့်ရသေးပါက ရှင်းလင်းသော ညွှန်ကြားချက်ပြန်ပို့ခြင်း
+    return res.status(404).json({
       success: false,
       error:
-        hfResult.error ||
-        "ရွေးချယ်ထားသော Model ကို လက်ရှိ Provider တွင် ပံ့ပိုးမပေးပါ။ Model ပြောင်းကြည့်ပါ သို့မဟုတ် FAL_KEY / HF_PROVIDER ထည့်ပါ။",
+        "Hugging Face Router (router.huggingface.co) တွင် ဤ Video Model endpoint (404 Not Found) မရရှိပါ[span_5](start_span)[span_5](end_span)။ Render Environment Variables ထဲတွင် HF_VIDEO_SPACE (ဥပမာ Gradio Video Space) သို့မဟုတ် FAL_KEY ထည့်သွင်းပြီး Redeploy လုပ်ပါ။",
       promptUsed: motionPrompt,
     });
   } catch (err) {
