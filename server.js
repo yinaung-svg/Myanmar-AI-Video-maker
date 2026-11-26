@@ -25,6 +25,7 @@ process.on("unhandledRejection", (reason) => {
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
+    version: "1.3.1",
     message: "Myanmar AI Video Maker backend is running.",
     model: HF_VIDEO_MODEL,
     space: HF_VIDEO_SPACE || "not set",
@@ -91,15 +92,24 @@ function mapParameterValue(param, { prompt, imageFileInput, audioFileInput }) {
   const pName = (param.parameter_name || param.label || "").toLowerCase();
   const component = (param.component || "").toLowerCase();
 
-  // 1) Dropdown / Choice (enum) ရှိရင် list ထဲက တန်ဖိုးတစ်ခုကိုပဲ ပြန်ပေးရမည်
+  // Choice / Size (256 or 512)
   if (Array.isArray(param.enum) && param.enum.length > 0) {
     if (param.parameter_has_default && param.parameter_default !== undefined) {
       return param.parameter_default;
     }
     return param.enum.includes(512) ? 512 : param.enum[0];
   }
+  if (
+    pName.includes("size") ||
+    pName.includes("resolution") ||
+    pName.includes("preprocess")
+  ) {
+    return param.parameter_has_default && param.parameter_default !== undefined
+      ? param.parameter_default
+      : 512;
+  }
 
-  // 2) Image input
+  // Image input
   if (
     component === "image" ||
     pName.includes("image") ||
@@ -111,7 +121,7 @@ function mapParameterValue(param, { prompt, imageFileInput, audioFileInput }) {
     return imageFileInput || null;
   }
 
-  // 3) Audio input
+  // Audio input
   if (
     component === "audio" ||
     pName.includes("audio") ||
@@ -121,7 +131,7 @@ function mapParameterValue(param, { prompt, imageFileInput, audioFileInput }) {
     return audioFileInput || null;
   }
 
-  // 4) Prompt / Text input
+  // Prompt / Text input
   if (
     component === "textbox" ||
     pName.includes("prompt") ||
@@ -132,12 +142,12 @@ function mapParameterValue(param, { prompt, imageFileInput, audioFileInput }) {
     return prompt;
   }
 
-  // 5) Boolean / Checkbox
+  // Boolean / Checkbox
   if (component === "checkbox" || param.type === "boolean") {
     return param.parameter_has_default ? Boolean(param.parameter_default) : false;
   }
 
-  // 6) Number / Slider
+  // Number / Slider
   if (
     component === "slider" ||
     component === "number" ||
@@ -150,7 +160,6 @@ function mapParameterValue(param, { prompt, imageFileInput, audioFileInput }) {
     return typeof param.minimum === "number" ? param.minimum : 0;
   }
 
-  // 7) Default fallback
   if (param.parameter_has_default && param.parameter_default !== undefined) {
     return param.parameter_default;
   }
@@ -175,7 +184,6 @@ async function callGradioSpace({ spaceId, prompt, imageBase64, audioBase64 }) {
       };
     }
 
-    // /generate_video ကို ပထမဦးစားပေး ရှာမယ်၊ မရှိရင် ကျန်တာတွေကို စမ်းမယ်
     const orderedEndpoints = [
       ...endpointNames.filter((ep) => ep.includes("generate") || ep.includes("video")),
       ...endpointNames.filter((ep) => !ep.includes("generate") && !ep.includes("video")),
@@ -189,29 +197,39 @@ async function callGradioSpace({ spaceId, prompt, imageBase64, audioBase64 }) {
 
     let lastErr = "";
     for (const ep of orderedEndpoints) {
-      try {
-        const schema = namedEndpoints[ep] || {};
-        const params = Array.isArray(schema.parameters) ? schema.parameters : [];
+      const schema = namedEndpoints[ep] || {};
+      const params = Array.isArray(schema.parameters) ? schema.parameters : [];
 
-        const args = params.map((p) =>
-          mapParameterValue(p, { prompt, imageFileInput, audioFileInput })
-        );
+      const mappedEntries = params.map((p, idx) => [
+        p.parameter_name || `param_${idx}`,
+        mapParameterValue(p, { prompt, imageFileInput, audioFileInput }),
+      ]);
 
-        const result = await client.predict(ep, args);
-        const videoUrl = extractVideoUrlFromGradioData(result?.data, spaceId);
+      const namedPayload = Object.fromEntries(
+        mappedEntries.filter(([, v]) => v !== undefined)
+      );
+      const arrayPayload = mappedEntries.map(([, v]) =>
+        v === undefined ? null : v
+      );
 
-        if (videoUrl) {
-          return {
-            ok: true,
-            videoUrl,
-            endpointUsed: ep,
-            data: result?.data,
-          };
+      for (const candidateInput of [namedPayload, arrayPayload]) {
+        try {
+          const result = await client.predict(ep, candidateInput);
+          const videoUrl = extractVideoUrlFromGradioData(result?.data, spaceId);
+
+          if (videoUrl) {
+            return {
+              ok: true,
+              videoUrl,
+              endpointUsed: ep,
+              data: result?.data,
+            };
+          }
+
+          lastErr = `Endpoint (${ep}) မှ video output ပြန်မလာပါ (output: ${JSON.stringify(result?.data).slice(0, 200)})`;
+        } catch (epErr) {
+          lastErr = epErr.message || String(epErr);
         }
-
-        lastErr = `Endpoint (${ep}) မှ video output ပြန်မလာပါ (output: ${JSON.stringify(result?.data).slice(0, 200)})`;
-      } catch (epErr) {
-        lastErr = epErr.message || String(epErr);
       }
     }
 
